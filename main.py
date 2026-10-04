@@ -94,3 +94,29 @@ def search_documents(q: str):
         ]
     finally:
         db.close()
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: int):
+    db: Session = SessionLocal()
+
+    try:
+        document = (
+            db.query(models.Document)
+            .filter(models.Document.id == document_id)
+            .first()
+        )
+
+        if document is None:
+            return {"message": "Document not found"}
+
+        db.delete(document)
+        db.commit()
+
+        if es.exists(index="documents", id=document_id):
+            es.delete(index="documents", id=document_id)
+
+        return {"message": "Document deleted successfully"}
+
+    finally:
+        db.close()
