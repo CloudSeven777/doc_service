@@ -92,3 +92,27 @@ uvicorn main:app --reload
 `DELETE /documents/{id}`
 
 Удаляет документ из SQLite и Elasticsearch.
+
+
+## Запуск через Docker Compose
+
+Проект можно полностью запустить с помощью Docker Compose.
+
+```bash
+docker compose up --build
+```
+
+После запуска загрузите данные:
+
+```bash
+docker compose exec app python load_data.py
+```
+
+Swagger UI будет доступен по адресу:
+
+`http://localhost:8000/docs`
+
+Для остановки контейнеров:
+
+```bash docker compose down```
+
