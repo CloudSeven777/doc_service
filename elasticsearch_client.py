@@ -1,6 +1,6 @@
 import os
 
-from elasticsearch import Elasticsearch
+from elasticsearch import AsyncElasticsearch
 
 
 ELASTICSEARCH_URL = os.getenv(
@@ -8,4 +8,4 @@ ELASTICSEARCH_URL = os.getenv(
     "http://localhost:9200"
 )
 
-es = Elasticsearch(ELASTICSEARCH_URL)
+es = AsyncElasticsearch(ELASTICSEARCH_URL)

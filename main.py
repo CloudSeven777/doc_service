@@ -1,27 +1,29 @@
 from fastapi import FastAPI
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+
 import models
 from database import engine, SessionLocal
 from schemas import DocumentCreate
 from elasticsearch_client import es
 
 
-
-models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
 
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
+
+
 @app.get("/")
-def root():
+async def root():
     return {"message": "Document Search Service is running"}
 
 
 @app.post("/documents")
-def create_document(document: DocumentCreate):
-    db: Session = SessionLocal()
-
-    try:
+async def create_document(document: DocumentCreate):
+    async with SessionLocal() as db:
         db_document = models.Document(
             id=document.id,
             rubrics=",".join(document.rubrics),
@@ -30,9 +32,10 @@ def create_document(document: DocumentCreate):
         )
 
         db.add(db_document)
-        db.commit()
-        db.refresh(db_document)
-        es.index(
+        await db.commit()
+        await db.refresh(db_document)
+
+        await es.index(
             index="documents",
             id=db_document.id,
             document={
@@ -47,14 +50,11 @@ def create_document(document: DocumentCreate):
             "text": db_document.text,
             "created_date": db_document.created_date,
         }
-    finally:
-        db.close()
-
 
 
 @app.get("/documents/search")
-def search_documents(q: str):
-    response = es.search(
+async def search_documents(q: str):
+    response = await es.search(
         index="documents",
         query={
             "match": {
@@ -72,16 +72,15 @@ def search_documents(q: str):
     if not document_ids:
         return []
 
-    db: Session = SessionLocal()
-
-    try:
-        documents = (
-            db.query(models.Document)
-            .filter(models.Document.id.in_(document_ids))
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(models.Document)
+            .where(models.Document.id.in_(document_ids))
             .order_by(models.Document.created_date.desc())
             .limit(20)
-            .all()
         )
+
+        documents = result.scalars().all()
 
         return [
             {
@@ -92,31 +91,25 @@ def search_documents(q: str):
             }
             for document in documents
         ]
-    finally:
-        db.close()
 
 
 @app.delete("/documents/{document_id}")
-def delete_document(document_id: int):
-    db: Session = SessionLocal()
-
-    try:
-        document = (
-            db.query(models.Document)
-            .filter(models.Document.id == document_id)
-            .first()
+async def delete_document(document_id: int):
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(models.Document).where(
+                models.Document.id == document_id
+            )
         )
+        document = result.scalar_one_or_none()
 
         if document is None:
             return {"message": "Document not found"}
 
-        db.delete(document)
-        db.commit()
+        await db.delete(document)
+        await db.commit()
 
-        if es.exists(index="documents", id=document_id):
-            es.delete(index="documents", id=document_id)
+        if await es.exists(index="documents", id=document_id):
+            await es.delete(index="documents", id=document_id)
 
         return {"message": "Document deleted successfully"}
-
-    finally:
-        db.close()

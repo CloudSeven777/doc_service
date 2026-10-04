@@ -1,25 +1,43 @@
-from fastapi.testclient import TestClient
+import pytest
+from httpx import ASGITransport, AsyncClient
 
 from main import app
 
 
-client = TestClient(app)
+@pytest.mark.asyncio
+async def test_openapi():
+    transport = ASGITransport(app=app)
 
-
-def test_openapi():
-    response = client.get("/openapi.json")
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test"
+    ) as client:
+        response = await client.get("/openapi.json")
 
     assert response.status_code == 200
 
-def test_search_documents():
-    response = client.get("/documents/search?q=Россия")
+
+@pytest.mark.asyncio
+async def test_search_documents():
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/documents/search",
+            params={"q": "Россия"}
+        )
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
-def test_create_document():
-    client.delete("/documents/99999")
+@pytest.mark.asyncio
+async def test_create_document():
+    transport = ASGITransport(app=app)
+
     document = {
         "id": 99999,
         "rubrics": ["test"],
@@ -27,13 +45,25 @@ def test_create_document():
         "created_date": "2026-10-04"
     }
 
-    response = client.post("/documents", json=document)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test"
+    ) as client:
+        await client.delete("/documents/99999")
 
-    assert response.status_code == 200
+        response = await client.post(
+            "/documents",
+            json=document
+        )
 
-    delete_response = client.delete("/documents/99999")
+        assert response.status_code == 200
 
-    assert delete_response.status_code == 200
-    assert delete_response.json()["message"] == "Document deleted successfully"
+        delete_response = await client.delete(
+            "/documents/99999"
+        )
 
-
+        assert delete_response.status_code == 200
+        assert (
+            delete_response.json()["message"]
+            == "Document deleted successfully"
+        )
